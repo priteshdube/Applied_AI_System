@@ -142,7 +142,7 @@ def plan_playlist(situation: str, songs: List[Dict], max_turns: int = 10) -> str
     client = genai.Client()
 
     chat = client.chats.create(
-        model="gemini-3-flash-preview",
+        model="gemini-2.5-flash",
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             tools=[TOOL_DEFINITIONS],

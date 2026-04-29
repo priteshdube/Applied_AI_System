@@ -4,6 +4,12 @@ A music recommendation system that combines a deterministic scoring engine with 
 
 ---
 
+## Project Walkthrough
+
+[Watch the demo on Loom](https://www.loom.com/share/99643251b2054ff6aa114dc3c19dcbd8)
+
+---
+
 ## Original Project — Modules 1–3
 
 **Music Recommender System** (`src/recommender.py`)
