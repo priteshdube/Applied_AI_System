@@ -18,7 +18,10 @@ enough information to stop, not the code.
 import os
 import sys
 import json
+import logging
 from typing import List, Dict
+
+logger = logging.getLogger(__name__)
 
 from google import genai
 from google.genai import types
@@ -87,6 +90,7 @@ def run_tool(tool_name: str, args: Dict, songs: List[Dict]) -> str:
     Returns a JSON string — Gemini expects tool results as serializable data.
     Errors are caught and returned as JSON so the loop never crashes mid-run.
     """
+    logger.info("Tool call  → %s | args: %s", tool_name, args)
     try:
         if tool_name == "get_catalog_summary":
             result = get_catalog_summary(songs)
@@ -103,9 +107,11 @@ def run_tool(tool_name: str, args: Dict, songs: List[Dict]) -> str:
         else:
             result = {"error": f"Unknown tool: '{tool_name}'"}
 
+        logger.info("Tool done  → %s | result_bytes: %d", tool_name, len(json.dumps(result)))
         return json.dumps(result)
 
     except Exception as exc:
+        logger.warning("Tool error → %s | %s", tool_name, exc)
         return json.dumps({"error": str(exc)})
 
 
@@ -143,10 +149,12 @@ def plan_playlist(situation: str, songs: List[Dict], max_turns: int = 10) -> str
         ),
     )
 
+    logger.info("Session start | situation: %.80s", situation)
+
     # --- Turn 0: send the user's situation ---
     response = chat.send_message(situation)
 
-    for _ in range(max_turns):
+    for turn in range(max_turns):
         # Collect every function_call part from this response
         fn_calls = [
             part.function_call
@@ -156,7 +164,14 @@ def plan_playlist(situation: str, songs: List[Dict], max_turns: int = 10) -> str
 
         # No function calls → Gemini is done; return its text response
         if not fn_calls:
+            logger.info(
+                "Session end | turns_used: %d | response_length: %d chars",
+                turn + 1,
+                len(response.text or ""),
+            )
             return response.text or ""
+
+        logger.info("Turn %d | tools requested: %s", turn + 1, [fc.name for fc in fn_calls])
 
         # Execute each tool call and build function_response parts to send back
         tool_result_parts = []
@@ -175,4 +190,5 @@ def plan_playlist(situation: str, songs: List[Dict], max_turns: int = 10) -> str
         response = chat.send_message(tool_result_parts)
 
     # Safety fallback: return whatever text is in the last response
+    logger.warning("max_turns cap hit (%d) — returning partial response", max_turns)
     return response.text or "Could not generate a playlist. Please try again."

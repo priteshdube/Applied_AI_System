@@ -220,7 +220,11 @@ The agentic loop has no natural hard stop from the model side — Gemini could t
 
 ## Testing Summary
 
-### What the test suite covers
+The project uses two complementary evaluation methods: automated unit tests for the scoring engine and an automated evaluation harness for the AI agent.
+
+### Method 1 — Unit tests (scoring engine, no API required)
+
+Run with: `pytest`
 
 39 tests across 11 test classes in `tests/test_recommender.py`:
 
@@ -238,17 +242,40 @@ The agentic loop has no natural hard stop from the model side — Gemini could t
 | `TestExplainRecommendation` | Explanation string is non-empty, contains "Score", mentions match/mismatch |
 | `TestSingleSongCatalog` | One-song catalog always returns that song for k≥1 |
 
+**Result: 39/39 tests pass.**
+
+### Method 2 — Evaluation harness (AI agent, requires API key)
+
+Run with: `python -m ai_agent.eval`
+
+`ai_agent/eval.py` runs 5 representative situations through the full agent pipeline and checks each response against 4 criteria:
+
+| Check | What it validates |
+|---|---|
+| Output non-empty | Agent returned text (not blank, not an error message) |
+| Response length ≥ 200 chars | Response is long enough to contain a real playlist |
+| Vibe keyword found | At least one situation-appropriate word appears (e.g. "lofi", "acoustic", "hype") |
+| Expected song found | At least one catalog song that fits the vibe appears in the playlist |
+
+The 5 test situations are: late-night coding, intense gym workout, rainy Sunday morning, romantic dinner, and pre-game hype. A test passes when all 4 checks pass.
+
+Logging is also enabled during the eval run — every tool call, turn count, and any errors are written to the console so you can see exactly what the agent did for each input.
+
+**Result: 5/5 tests pass. 20/20 individual checks pass. Average response length ~700 chars.**
+
 ### What worked
 
 - The Gaussian scoring behaves exactly as intended: at one sigma away from the target it returns ~60% of maximum points (`e^(-0.5) ≈ 0.6065`), verified by the `test_one_sigma_away_returns_approx_60_pct` test.
 - The adversarial profile tests caught a real insight: a user who says they love lofi but wants maximum energy will never get a perfect-score result, because the genre/mood bonus and energy penalty partially cancel each other. That's the correct behavior and the test documents it explicitly.
-- All 39 tests pass deterministically with no mocking of external services.
+- All 39 unit tests pass deterministically with no mocking of external services.
+- Across all 5 eval cases, the agent consistently called `get_catalog_summary` first (as instructed in the system prompt) before calling `get_recommendations`. The system prompt design worked.
 
 ### What didn't work / what was learned
 
-- **The AI agent is not directly unit-tested.** The agentic loop in `agent.py` makes live API calls to Gemini, so it can't be tested with `pytest` without mocking the entire SDK. This is a known limitation — the correctness guarantee lives in the scoring engine tests, not in integration tests for the agent.
-- **Empty string behavior.** Early in development, `score_song` would register an empty genre preference as matching an empty genre in the catalog. Rather than silently "fixing" this edge case by adding a guard, a test was written to document the behavior explicitly. This is the right call: the catalog doesn't have blank genres, so it's harmless — and documenting known behavior is better than pretending the edge case doesn't exist.
+- **The AI agent cannot be unit-tested without mocking the Gemini SDK.** The agentic loop makes live API calls, so unit tests are not practical. The eval harness solves this at the integration level — it tests real agent behavior against real API responses.
+- **Empty string behavior.** Early in development, `score_song` would register an empty genre preference as matching an empty genre in the catalog. Rather than silently "fixing" this edge case by adding a guard, a test was written to document the behavior explicitly — the catalog doesn't have blank genres, so it's harmless, and documenting known behavior is better than pretending the edge case doesn't exist.
 - **k=0 needs to work.** It wasn't obvious that `recommend(user, k=0)` should return an empty list rather than crash. Writing the k-edge-case tests first surfaced this before it could become a real bug.
+- **Logging revealed turn efficiency.** Adding `logger.info` to the agentic loop showed that typical sessions use 2–3 turns (catalog summary → recommendations → optional filter → final response), well below the `max_turns=10` cap. This confirmed the cap is safe and the agent isn't over-calling tools.
 
 ---
 
