@@ -123,7 +123,12 @@ def check_non_empty(output: str) -> Tuple[bool, str]:
 
 
 def check_substantial(output: str, min_length: int) -> Tuple[bool, str]:
-    """Output is long enough to contain a real playlist."""
+    """Output is long enough to contain a real playlist.
+    Returns False immediately if the output is an error message —
+    length is only meaningful for valid responses."""
+    is_error = "something went wrong" in output.lower() or output.startswith("AGENT ERROR")
+    if is_error:
+        return False, "skipped — output is an error message"
     ok = len(output) >= min_length
     detail = (
         f"length {len(output)} >= {min_length}"
